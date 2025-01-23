@@ -20,6 +20,7 @@ lazy_static! {
     static ref ACTIVE_MODE: Mutex<Option<Mode>> = Mutex::new(None);
     static ref ACTIVE_INC_EGRAPH: Mutex<Option<EGraph>> = Mutex::new(None);
     static ref SIMPLIFY_INC_EGRAPH: Mutex<Option<EGraph>> = Mutex::new(Some(EGraph::default()));
+    static ref REWRITE_INC_EGRAPH: Mutex<Option<EGraph>> = Mutex::new(Some(EGraph::default()));
 }
 
 pub struct Context {
@@ -31,41 +32,82 @@ pub struct Context {
 #[derive(Clone, Copy, Debug)]
 enum Mode {
     Simplify,
+    Rewrite,
     Other,
 }
 
 fn activate_inc_egraph(mode: Mode) {
     let mut simplify = SIMPLIFY_INC_EGRAPH.try_lock().unwrap();
+    let mut rewrite = REWRITE_INC_EGRAPH.try_lock().unwrap();
     let mut active = ACTIVE_INC_EGRAPH.try_lock().unwrap();
     let mut active_mode = ACTIVE_MODE.try_lock().unwrap();
     println!("current mode: {:?}, new mode: {:?}", active_mode, mode);
 
+    use Mode::*;
+
     match active_mode.as_ref() {
-        Some(Mode::Simplify) => match mode {
-            Mode::Simplify => return,
-            Mode::Other => {
-                *active_mode = Some(Mode::Other);
+        Some(Simplify) => match mode {
+            Simplify => return,
+            Rewrite => {
+                *active_mode = Some(Rewrite);
+                *simplify = Some(active.take().unwrap());
+                *active = Some(rewrite.take().unwrap());
+            }
+            Other => {
+                *active_mode = Some(Other);
                 *simplify = Some(active.take().unwrap());
                 *active = Some(EGraph::default());
             }
         },
-        Some(Mode::Other) => match mode {
-            Mode::Simplify => {
-                *active_mode = Some(Mode::Simplify);
+        Some(Other) => match mode {
+            Simplify => {
+                *active_mode = Some(Simplify);
                 *active = Some(simplify.take().unwrap());
             }
-            Mode::Other => return,
+            Rewrite => {
+                *active_mode = Some(Rewrite);
+                *active = Some(rewrite.take().unwrap());
+            }
+            Other => return,
         },
-        None => match mode {
-            Mode::Simplify => {
-                *active_mode = Some(Mode::Simplify);
+        Some(Rewrite) => match mode {
+            Simplify => {
+                *active_mode = Some(Simplify);
+                *rewrite = Some(active.take().unwrap());
                 *active = Some(simplify.take().unwrap());
             }
-            Mode::Other => {
-                *active_mode = Some(Mode::Other);
+            Rewrite => return,
+            Other => {
+                *active_mode = Some(Other);
+                *rewrite = Some(rewrite.take().unwrap());
                 *active = Some(EGraph::default());
             }
         },
+        None => match mode {
+            Simplify => {
+                *active_mode = Some(Simplify);
+                *active = Some(simplify.take().unwrap());
+            }
+            Other => {
+                *active_mode = Some(Other);
+                *active = Some(EGraph::default());
+            }
+            // Must go to simplify first
+            Rewrite => unreachable!(),
+        },
+    }
+}
+
+fn increment_version() {
+    let mut guard = ACTIVE_INC_EGRAPH.try_lock().unwrap();
+    let mut inc_egraph = guard.take().unwrap();
+    let version = inc_egraph.get_version();
+    if version != 0 && version % 50 == 0 {
+        *guard = Some(EGraph::default());
+    } else {
+        let version = inc_egraph.inc_version();
+        *guard = Some(inc_egraph);
+        println!("Incremented version to: {}", version);
     }
 }
 
@@ -73,17 +115,11 @@ fn activate_inc_egraph(mode: Mode) {
 pub unsafe extern "C" fn egraph_create(mode: u32) -> *mut Context {
     if mode == 0 {
         activate_inc_egraph(Mode::Simplify);
-        let mut guard = ACTIVE_INC_EGRAPH.try_lock().unwrap();
-        let mut inc_egraph = guard.take().unwrap();
-        let version = inc_egraph.get_version();
-        if version != 0 && version % 50 == 0 {
-            *guard = Some(EGraph::default());
-        } else {
-            let version = inc_egraph.inc_version();
-            *guard = Some(inc_egraph);
-            println!("Incremented version to: {}", version);
-        }
+        increment_version();
     } else if mode == 1 {
+        activate_inc_egraph(Mode::Rewrite);
+        increment_version();
+    } else if mode == 2 {
         activate_inc_egraph(Mode::Other);
     } else {
         unreachable!()
@@ -173,7 +209,7 @@ pub unsafe extern "C" fn egraph_add_node(
     let mut guard = ACTIVE_INC_EGRAPH.try_lock().unwrap();
     let inc_egraph = guard.as_mut().unwrap();
 
-    let id = inc_egraph.add(node);
+    let id = inc_egraph.add_forced(node);
     if is_root {
         context.runner.roots.push(id);
     }
@@ -269,7 +305,7 @@ pub unsafe extern "C" fn egraph_run(
         let rho = ones / (zeros + ones);
         assert!(rho.is_nan() || rho <= 1f64);
 
-        let increase = (0.1 * rho * node_limit as f64) as usize;
+        let increase = (rho * node_limit as f64) as usize;
         if increase == 0 {
             println!("shortcircuiting...");
             context.runner.stop_reason = Some(StopReason::Saturated);

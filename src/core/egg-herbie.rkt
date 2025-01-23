@@ -63,9 +63,12 @@
 
 ; Makes a new egraph that is managed by Racket's GC
 (define (make-egraph mode)
-  (if (equal? mode 'single)
-      (egraph-data (egraph_create 0) (make-hash) (make-hash) (make-hash))
-      (egraph-data (egraph_create 1) (make-hash) (make-hash) (make-hash))))
+  (define int-mode
+    (cond
+      [(equal? mode 'single) 0]
+      [(equal? mode 'multi) 1]
+      [else 2]))
+  (egraph-data (egraph_create int-mode) (make-hash) (make-hash) (make-hash)))
 
 ; Creates a new runner using an existing egraph.
 ; Useful for multi-phased rule application
