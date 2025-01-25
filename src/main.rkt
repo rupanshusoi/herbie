@@ -25,9 +25,8 @@
 (define (string->flag s)
   (match (string-split s ":")
     [(list (app string->symbol category) (app string->symbol flag))
-     (and (dict-has-key? all-flags category)
-          (set-member? (dict-ref all-flags category) flag)
-          (list category flag))]
+     #:when (set-member? (dict-ref all-flags category '()) flag)
+     (list category flag)]
     [_ (raise-herbie-error "Invalid flag `~a`" s #:url "options.html")]))
 
 (define (default-flags->table)
@@ -78,9 +77,7 @@
    [("--platform")
     platform
     ("The platform to use during improvement" "[Default: default]")
-    (*platform-name* (string->symbol platform))
-    (*active-platform* (get-platform (*platform-name*)))
-    (activate-platform! (*active-platform*))]
+    (activate-platform! (string->symbol platform))]
    [("--num-iters")
     num
     ("The number of iterations to use for the main loop. Herbie may find additional improvements

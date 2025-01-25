@@ -5,6 +5,7 @@
          json)
 
 (require "../syntax/read.rkt"
+         "../syntax/syntax.rkt"
          "../syntax/sugar.rkt"
          "../syntax/types.rkt"
          "../core/localize.rkt"
@@ -211,8 +212,8 @@
 
   ;; compute error/cost for output expression
   (define end-exprs (map alt-expr end-alts))
-  (define end-train-errs (flip-lists (batch-errors end-exprs train-pcontext ctx)))
-  (define end-test-errs (flip-lists (batch-errors end-exprs test-pcontext* ctx)))
+  (define end-train-errs (batch-errors end-exprs train-pcontext ctx))
+  (define end-test-errs (batch-errors end-exprs test-pcontext* ctx))
   (define end-alts-data (map alt-analysis end-alts end-train-errs end-test-errs))
 
   ;; bundle up the result
@@ -257,8 +258,7 @@
       (define start-time (current-inexact-milliseconds))
       (reset!)
       (*context* (test-context test))
-      (*active-platform* (get-platform (*platform-name*)))
-      (activate-platform! (*active-platform*))
+      (activate-platform! (*platform-name*))
       (set! timeline (*timeline*))
       (when seed
         (set-seed! seed))

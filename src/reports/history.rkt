@@ -49,21 +49,21 @@
 
 (define (splice-proof-step step)
   (let/ec k
-          (let loop ([expr step]
-                     [loc '()])
-            (match expr
-              [(list 'Rewrite=> rule sub)
-               (define loc* (reverse loc))
-               (k 'Rewrite=> rule loc* (location-do loc* step (λ _ sub)))]
-              [(list 'Rewrite<= rule sub)
-               (define loc* (reverse loc))
-               (k 'Rewrite<= rule loc* (location-do loc* step (λ _ sub)))]
-              [(list op args ...)
-               (for ([arg (in-list args)]
-                     [i (in-naturals 1)])
-                 (loop arg (cons i loc)))]
-              [_ (void)]))
-          (k 'Goal #f '() step)))
+    (let loop ([expr step]
+               [loc '()])
+      (match expr
+        [(list 'Rewrite=> rule sub)
+         (define loc* (reverse loc))
+         (k 'Rewrite=> rule loc* (location-do loc* step (λ _ sub)))]
+        [(list 'Rewrite<= rule sub)
+         (define loc* (reverse loc))
+         (k 'Rewrite<= rule loc* (location-do loc* step (λ _ sub)))]
+        [(list op args ...)
+         (for ([arg (in-list args)]
+               [i (in-naturals 1)])
+           (loop arg (cons i loc)))]
+        [_ (void)]))
+    (k 'Goal #f '() step)))
 
 (define (altn-errors altn pcontext pcontext2 ctx)
   (define repr (context-repr ctx))
@@ -73,16 +73,17 @@
   (values (format-accuracy err repr-bits #:unit "%")
           (format "~a on training set" (format-accuracy err2 repr-bits #:unit "%"))))
 
-(define (remove-literals expr)
-  (match expr
-    [(? symbol?) expr]
-    [(? number?) expr]
-    [(? literal?) (literal-value expr)]
-    [(approx spec impl) (approx (remove-literals spec) (remove-literals impl))]
-    [(list op args ...) (cons op (map remove-literals args))]))
-
 (define (expr->fpcore expr ctx #:ident [ident #f])
-  (list 'FPCore (context-vars ctx) (remove-literals expr)))
+  (list 'FPCore
+        (context-vars ctx)
+        (let loop ([expr expr])
+          (match expr
+            [(? symbol?) expr]
+            [(? number?) expr]
+            [(? literal?) (literal-value expr)]
+            [(approx spec impl) (loop impl)]
+            [(hole precision spec) (loop spec)]
+            [(list op args ...) (cons op (map loop args))]))))
 
 (define (mixed->fpcore expr ctx)
   (define expr*
@@ -92,6 +93,7 @@
         [(? number?) expr]
         [(? literal?) (literal-value expr)]
         [(approx _ impl) (loop impl)]
+        [(hole precision spec) (loop spec)]
         [`(if ,cond ,ift ,iff)
          `(if ,(loop cond)
               ,(loop ift)

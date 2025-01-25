@@ -9,22 +9,18 @@
          "egg-herbie.rkt"
          "batch.rkt")
 
-(provide simplify-batch)
+(provide (contract-out [simplify-batch (-> egg-runner? batch? (listof (listof batchref?)))]))
 
 (module+ test
   (require rackunit
            "../syntax/load-plugin.rkt")
   (load-herbie-plugins))
 
-;; for each expression, returns a list of simplified versions corresponding to egraph iterations
-;; the last expression is the simplest unless something went wrong due to unsoundness
-;; if the input specifies proofs, it instead returns proofs for these expressions
-(define/contract (simplify-batch runner extractor)
-  (-> egg-runner? procedure? (listof (listof batchref?)))
+(define (simplify-batch runner batch)
   (timeline-push! 'inputs (map ~a (batch->progs (egg-runner-batch runner) (egg-runner-roots runner))))
-  (timeline-push! 'method "egg-herbie")
+
   (define timeline-end! (timeline-start! 'times (~a "i-run-egg")))
-  (define simplifieds (run-egg runner (cons 'single extractor)))
+  (define simplifieds (egraph-best runner batch))
   (timeline-end!)
   (define out
     (for/list ([simplified (in-list simplifieds)]
@@ -46,12 +42,12 @@
   (define (test-simplify . args)
     (define batch (progs->batch args))
     (define runner
-      (make-egg-runner batch
-                       (batch-roots batch)
-                       (map (lambda (_) 'real) args)
-                       `((,(*simplify-rules*) . ((node . ,(*node-limit*)))))))
-    (define extractor (typed-egg-batch-extractor default-egg-cost-proc batch))
-    (map (compose debatchref last) (simplify-batch runner extractor)))
+      (make-egraph batch
+                   (batch-roots batch)
+                   (map (lambda (_) 'real) args)
+                   `((,(*simplify-rules*) . ((node . ,(*node-limit*)))))))
+    (parameterize ([*egraph-platform-cost* #f])
+      (map (compose debatchref last) (simplify-batch runner batch))))
 
   (define test-exprs
     '((1 . 1) (0 . 0)

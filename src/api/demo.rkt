@@ -242,9 +242,8 @@
   (define resp
     (with-handlers ([exn:fail? (λ (e) (hash 'error (exn->string e)))])
       (fn post-data)))
-  (if (hash-has-key? resp 'error)
-      (eprintf "Error handling request: ~a\n" (hash-ref resp 'error))
-      (eprintf "Success handling request\n"))
+  (when (hash-has-key? resp 'error)
+    (eprintf "Error handling request: ~a\n" (hash-ref resp 'error)))
   (if (hash-has-key? resp 'error)
       (response 500
                 #"Bad Request"
@@ -500,7 +499,6 @@
   (post-with-json-response (lambda (post-data)
                              (define formula
                                (read-syntax 'web (open-input-string (hash-ref post-data 'formula))))
-                             (eprintf "Converting to Math.js ~a..." formula)
 
                              (define result (core->mathjs (syntax->datum formula)))
                              (hasheq 'mathjs result))))
@@ -509,9 +507,7 @@
   (post-with-json-response (lambda (post-data)
                              ; FPCore formula and target language
                              (define formula (read (open-input-string (hash-ref post-data 'formula))))
-                             (eprintf "Translating formula: ~a...\n" formula)
                              (define target-lang (hash-ref post-data 'language))
-                             (eprintf "Target language: ~a...\n" target-lang)
                              ; Select the appropriate conversion function
                              (define lang-converter
                                (case target-lang
@@ -528,7 +524,6 @@
 
                              ; convert the expression
                              (define converted (lang-converter formula "expr"))
-                             (eprintf "Converted Expression: \n~a...\n" converted)
                              (hasheq 'result converted 'language target-lang))))
 
 (define (run-demo #:quiet [quiet? #f]

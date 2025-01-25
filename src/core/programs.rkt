@@ -40,6 +40,7 @@
     [(literal val precision) (get-representation precision)]
     [(? variable?) (context-lookup ctx node)]
     [(approx _ impl) (repr-of-node batch impl ctx)]
+    [(hole precision spec) (get-representation precision)]
     [(list 'if cond ift iff) (repr-of-node batch ift ctx)]
     [(list op args ...) (impl-info op 'otype)]))
 
@@ -180,7 +181,8 @@
 (define/contract (location-get loc prog)
   (-> location? expr? expr?)
   ; Clever continuation usage to early-return
-  (let/ec return (location-do loc prog return)))
+  (let/ec return
+    (location-do loc prog return)))
 
 (define/contract (replace-expression expr from to)
   (-> expr? expr? expr? expr?)
