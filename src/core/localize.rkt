@@ -83,7 +83,7 @@
   ; egg runner (2-phases for real rewrites and implementation selection)
   (define batch (progs->batch progs))
   (define runner
-    (make-egraph batch
+    (make-egraph 'localize batch
                  (batch-roots batch)
                  reprs
                  `((,lifting-rules . ((iteration . 1) (scheduler . simple)))

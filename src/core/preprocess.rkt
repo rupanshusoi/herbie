@@ -64,7 +64,7 @@
 
   ; egg query
   (define batch (progs->batch (list expr)))
-  (define runner (make-egraph batch (batch-roots batch) (list (context-repr ctx)) schedule))
+  (define runner (make-egraph 'preprocess batch (batch-roots batch) (list (context-repr ctx)) schedule))
 
   ; run egg
   (define simplified (simplify-batch runner batch))
@@ -92,7 +92,7 @@
 
   (define batch (progs->batch (cons spec (map cdr identities))))
   (define runner
-    (make-egraph batch
+    (make-egraph 'preprocess batch
                  (batch-roots batch)
                  (make-list (vector-length (batch-roots batch)) (context-repr ctx))
                  `((,rules . ((node . ,(*node-limit*)))))))

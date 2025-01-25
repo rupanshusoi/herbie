@@ -58,8 +58,15 @@
          id->spec)) ; map from e-class id to an approx-spec or #f
 
 ; Makes a new egraph that is managed by Racket's GC
-(define (make-egraph-data)
-  (egraph-data (egraph_create) (make-hash)))
+; 'simplify => 0
+; 'rewrite => 1
+; _ => 2
+(define (make-egraph-data mode)
+  (egraph-data (egraph_create (cond
+                                [(equal? mode 'simplify) 0]
+                                [(equal? mode 'rewrite) 1]
+                                [else 2]))
+               (make-hash)))
 
 ; Creates a new runner using an existing egraph.
 ; Useful for multi-phased rule application
@@ -261,7 +268,9 @@
 
 (define (egg-var->var egg-var ctx)
   (define idx (string->number (substring (symbol->string egg-var) 4)))
-  (list-ref (context-vars ctx) idx))
+  (if (>= idx (length (context-vars ctx)))
+      (list-ref (context-vars ctx) 0)
+      (list-ref (context-vars ctx) idx)))
 
 ;; Translates a Herbie expression into an expression usable by egg.
 ;; Updates translation dictionary upon encountering variables.
@@ -1238,7 +1247,7 @@
 
 (define (egraph-run-schedule mode batch roots schedule ctx)
   ; allocate the e-graph
-  (define egg-graph (make-egraph-data))
+  (define egg-graph (make-egraph-data mode))
 
   ; insert expressions into the e-graph
   (define root-ids (egraph-add-exprs egg-graph batch roots ctx))
@@ -1295,7 +1304,7 @@
 ;;     - scheduler: `(scheduler . <name>)` [default: backoff]
 ;;        - `simple`: run all rules without banning
 ;;        - `backoff`: ban rules if the fire too much
-(define (make-egraph batch roots reprs schedule #:context [ctx (*context*)])
+(define (make-egraph mode batch roots reprs schedule #:context [ctx (*context*)])
   (define (oops! fmt . args)
     (apply error 'verify-schedule! fmt args))
   ; verify the schedule
@@ -1316,7 +1325,7 @@
            [_ (oops! "in instruction `~a`, unknown parameter `~a`" instr param)]))]
       [_ (oops! "expected `(<rules> . <params>)`, got `~a`" instr)]))
 
-  (define-values (root-ids egg-graph) (egraph-run-schedule batch roots schedule ctx))
+  (define-values (root-ids egg-graph) (egraph-run-schedule mode batch roots schedule ctx))
 
   ; make the runner
   (egg-runner batch roots reprs schedule ctx root-ids egg-graph))

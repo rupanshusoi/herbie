@@ -194,7 +194,7 @@
 ; Difference of cubes
 (define-ruleset*
  difference-of-cubes
- (polynomials sound)
+ (polynomials)
  #:type ([a real] [b real])
  [sum-cubes (+ (pow a 3) (pow b 3)) (* (+ (* a a) (- (* b b) (* a b))) (+ a b))]
  [difference-cubes (- (pow a 3) (pow b 3)) (* (+ (* a a) (+ (* b b) (* a b))) (- a b))]

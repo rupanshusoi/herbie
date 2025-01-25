@@ -79,7 +79,7 @@ fn activate_inc_egraph(mode: Mode) {
             Rewrite => return,
             Other => {
                 *active_mode = Some(Other);
-                *rewrite = Some(rewrite.take().unwrap());
+                *rewrite = Some(active.take().unwrap());
                 *active = Some(EGraph::default());
             }
         },
@@ -353,11 +353,17 @@ pub unsafe extern "C" fn egraph_run(
     // Prune all e-nodes with children where its e-class has a leaf node (with no children). Pruning
     // safely improves performance because pruning occurs right before extraction and leaf e-nodes
     // always have a lower cost.
-    context.runner.egraph.classes_mut().for_each(|eclass| {
-        if eclass.nodes.iter().any(|n| n.is_leaf()) {
-            eclass.nodes.retain(|n| n.is_leaf());
+
+    let mut guard = ACTIVE_INC_EGRAPH.try_lock().unwrap();
+    let mut inc_egraph = guard.take().unwrap();
+
+    inc_egraph.classes_mut().for_each(|eclass| {
+        if eclass.nodes.iter().any(|n| n.node.is_leaf()) {
+            eclass.nodes.retain(|n| n.node.is_leaf());
         }
     });
+
+    *guard = Some(inc_egraph);
 
     let iterations = context
         .runner
@@ -512,22 +518,23 @@ pub unsafe extern "C" fn egraph_get_simplest(
     node_id: u32,
     iter: u32,
 ) -> *const c_char {
+    todo!()
     // Safety: `ptr` was box allocated by `egraph_create`
-    let context = ManuallyDrop::new(Box::from_raw(ptr));
-    let ext = find_extracted(&context.runner, node_id, iter);
-    let best_str = ManuallyDrop::new(CString::new(ext.best.to_string()).unwrap());
+    //let context = ManuallyDrop::new(Box::from_raw(ptr));
+    //let ext = find_extracted(&context.runner, node_id, iter);
+    //let best_str = ManuallyDrop::new(CString::new(ext.best.to_string()).unwrap());
 
-    best_str.as_ptr()
+    //best_str.as_ptr()
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn egraph_get_proof(
-    ptr: *mut Context,
+    _ptr: *mut Context,
     expr: *const c_char,
     goal: *const c_char,
 ) -> *const c_char {
     // Safety: `ptr` was box allocated by `egraph_create`
-    let mut context = ManuallyDrop::new(Box::from_raw(ptr));
+    // let mut context = ManuallyDrop::new(Box::from_raw(ptr));
     // Send `EGraph` since neither `Context` nor `Runner` are `Send`. `Runner::explain_equivalence` just forwards to `EGraph::explain_equivalence` so this is fine.
     let mut guard = ACTIVE_INC_EGRAPH.try_lock().unwrap();
     let mut inc_egraph = guard.take().unwrap();
@@ -562,14 +569,16 @@ pub unsafe extern "C" fn egraph_get_variants(
     let orig_recexpr: RecExpr = CStr::from_ptr(orig_expr).to_str().unwrap().parse().unwrap();
     let head_node = &orig_recexpr.as_ref()[orig_recexpr.as_ref().len() - 1];
 
+    let guard = ACTIVE_INC_EGRAPH.try_lock().unwrap();
+    let egraph = guard.as_ref().unwrap();
+
     // extractor
-    let mut extractor =
-        Extractor::new(&context.runner.egraph, AltCost::new(&context.runner.egraph));
+    let extractor = Extractor::new(egraph, AltCost::new(egraph));
     let mut cache: IndexMap<Id, RecExpr> = Default::default();
 
     // extract variants
     let mut exprs = vec![];
-    for n in &context.runner.egraph[id].nodes {
+    for n in &egraph[id].nodes {
         // assuming same ops in an eclass cannot
         // have different precisions
         if !n.node.matches(head_node) {
